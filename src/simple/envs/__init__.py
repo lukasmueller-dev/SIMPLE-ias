@@ -126,6 +126,11 @@ register(
     entry_point="simple.envs.sonic_loco_manip:SonicLocoManipEnv",
     kwargs={"task":"g1_wholebody_xmove_pick_teleop"},
 )
+register(
+    id="simple/G1WholebodyWhiteTablePickTeleop-v0",
+    entry_point="simple.envs.sonic_loco_manip:SonicLocoManipEnv",
+    kwargs={"task":"g1_wholebody_white_table_pick_teleop"},
+)
 
 
 
