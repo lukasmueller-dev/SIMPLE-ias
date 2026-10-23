@@ -249,7 +249,15 @@ def main():
     parser.add_argument("--fps", type=int, default=default_fps)
     parser.add_argument("--video-key", default="observation.rgb_head_stereo_left")
     parser.add_argument("--chunks-size", type=int, default=1000)
+    parser.add_argument("--dex3-order", action="store_true",
+                        help="right hand as thumb, middle, index like the left: the real G1's Dex3 motor order "
+                             "(psi0's real checkpoints); upstream's sim data keeps thumb, index, middle")
     args = parser.parse_args()
+    if args.dex3_order:
+        right = [("right_hand_thumb", 36, 39), ("right_hand_middle", 41, 43), ("right_hand_index", 39, 41)]
+        for slices in (STATE_SLICES, ACTION_SLICES):
+            i = slices.index(("right_hand", 36, 43))
+            slices[i:i + 1] = right
 
     # last_episode_idx = 0
     episode_idx = 0

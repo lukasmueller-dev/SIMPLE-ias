@@ -111,6 +111,9 @@ class MotionPlannerAgent(PrimitiveAgent):
                 target_orientation = spec.meta.get("orientation", None)
                 grasp_type = spec.meta.get("grasp_type", "parallel_gripper")
                 eef_state = spec.meta.get("eef_state", "close_eef")
+                if "delta_position" in spec.meta or "delta_rpy" in spec.meta:
+                    target_position, target_orientation = self._relative_goal(spec.meta)
+                    spec.meta["orientation"] = target_orientation   # the bodex branch below re-reads it
 
                 if target_position is None:
                     raise ValueError("MoveEEFToPoseSpec requires 'position' in meta")
@@ -214,6 +217,8 @@ class MotionPlannerAgent(PrimitiveAgent):
                         traj.append(dict(zip(jnames, qpos)))
                 
                 self.queue_follow_path_with_eef(traj, eef_state, hand_uid=hand_uid)
+                if spec.meta.get("hold_steps"):   # stay at the goal, e.g. while pouring
+                    self.queue_follow_path_with_eef([traj[-1]] * spec.meta["hold_steps"], eef_state, hand_uid=hand_uid)
                 self._last_traj_qpos = traj[-1] # HACK store for retreat planning
                 
                 self._last_eef_orientation = target_orientation
@@ -601,6 +606,22 @@ class MotionPlannerAgent(PrimitiveAgent):
             
         return True
     
+    def _relative_goal(self, meta):
+        """World goal: the hand at the end of the last planned path, moved by `delta_position` (m)
+        and turned by `delta_rpy` (rad, about the robot frame's axes, around the palm)."""
+        q = self._last_traj_qpos
+        solver = self.planner.init_js_ik_solver
+        if isinstance(q, dict):
+            q = [q[name] for name in solver.joint_names]
+        q = np.asarray(q, dtype=np.float32)[:solver.dof]
+        ee = solver.fk(torch.tensor(q, device="cuda", dtype=torch.float32)[None]).ee_pose
+        T = np.eye(4)
+        T[:3, 3] = ee.position.cpu().numpy()[0] + np.asarray(meta.get("delta_position", (0, 0, 0)))
+        T[:3, :3] = t3d.euler.euler2mat(*meta.get("delta_rpy", (0, 0, 0))) @ t3d.quaternions.quat2mat(
+            ee.quaternion.cpu().numpy()[0])
+        T_world = self.task.layout.actors["robot"].pose.as_matrix() @ T
+        return T_world[:3, 3], t3d.quaternions.mat2quat(T_world[:3, :3])
+
     def reset(self):
         """Reset the agent state, including subtask index for multi-phase planning."""
         super().reset()

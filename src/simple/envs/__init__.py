@@ -80,6 +80,11 @@ register(
     kwargs={"task":"g1_wholebody_bend_pick_and_place_on_sofa_mp"},
 )
 register(
+    id="simple/G1WholebodyPourMP-v0",
+    entry_point="simple.envs.loco_manipulation:LocoManipulationEnv",
+    kwargs={"task":"g1_wholebody_pour_mp"},
+)
+register(
     id="simple/G1WholebodyTabletopGraspMP-v0",
     entry_point="simple.envs.loco_manipulation:LocoManipulationEnv",
     kwargs={"task":"g1_wholebody_tabletop_grasp_mp"},

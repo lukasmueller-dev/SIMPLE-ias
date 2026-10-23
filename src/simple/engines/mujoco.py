@@ -639,16 +639,14 @@ class MujocoSimulator(Simulator):
             """
             DEFAULT_HEAD_CAM_POSITION = np.array([0.05366004+0.0039635, 0.01752999 + 0, 0.4738702 + -0.044], dtype=np.float32)
             DEFAULT_HEAD_CAM_ORIENTATION = np.array([0.91496, 0.0, 0.40355, 0.0], dtype=np.float32)
-            q = np.asarray(camera.pose.quaternion, dtype=np.float32)
-            is_identity_quat = np.allclose(q[1:], 0.0, atol=1e-6) and np.isclose(abs(float(q[0])), 1.0, atol=1e-6)
-            assert is_identity_quat, f"Expected eye_in_head camera quaternion to be identity (wxyz)"
+            q = np.asarray(camera.pose.quaternion, dtype=np.float32)   # wxyz, in the head link's frame, as Isaac applies it
 
             self._add_mujoco_camera(
                 torso_body,
                 camera,
                 name=cname,
                 pos=DEFAULT_HEAD_CAM_POSITION + camera.pose.position,  # FIXME
-                quat=t3d.quaternions.qmult(DEFAULT_HEAD_CAM_ORIENTATION, q_isaac_mujoco),
+                quat=t3d.quaternions.qmult(t3d.quaternions.qmult(DEFAULT_HEAD_CAM_ORIENTATION, q), q_isaac_mujoco),
             )
         else:
             raise ValueError(f"Unsupported camera mount: {camera.mount}")

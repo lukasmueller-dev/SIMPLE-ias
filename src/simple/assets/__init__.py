@@ -8,3 +8,4 @@ from .objects import ObjectsAssetManager
 from .objaverse import ObjaverseAssetManager
 from .primitive import PrimitiveAsseManager, Primitive, Box
 from .articulate import ArticulatedAssetManager
+from .pour import PourAssetManager

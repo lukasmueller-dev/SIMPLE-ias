@@ -264,7 +264,8 @@ class Bodex:
 
         # FIXME rotation the success rate is very low , need to be fixed
         T_world_object = target_pose.as_matrix()
-        # T_world_object[:3, :3] = T_bodexworld_object[:3, :3]
+        if getattr(asset, "symmetric_z", False):  # round about z: the grasp keeps its world heading
+            T_world_object[:3, :3] = T_bodexworld_object[:3, :3]
         T_world_grasp = T_world_object @ T_object_grasp
 
         # get T_world_link_poses

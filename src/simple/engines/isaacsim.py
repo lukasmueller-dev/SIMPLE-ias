@@ -411,7 +411,7 @@ class IsaacSimSimulator(Simulator):
         if move_surface_to_origin:
             surface_center_position = - surface_obb["position"] + \
                 np.array(scene.center_offset, dtype=np.float32) #self._config.hssd.center_offset
-            if self.task.robot.uid == "g1_sonic":
+            if self.task.robot.uid == "g1_sonic" or getattr(self.task, "keep_ground_at_world_origin", False):
                 # FIXME backward compatibility: robot touches the ground
                 surface_center_position[2] = 0.0 
             scene_prim.GetAttribute("xformOp:translate").Set(tuple(surface_center_position))
