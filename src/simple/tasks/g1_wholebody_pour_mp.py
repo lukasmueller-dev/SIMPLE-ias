@@ -44,7 +44,7 @@ PLACE_GAP = 0.02                               # the return move stops this high
 CAP_CLEAR = 0.05                               # cap height over the rim while pouring
 SQUAT = -0.12                                  # AMO height command: a 63 cm table is low for a standing G1
 SQUEEZE = 0.50                                 # rad past the pregrasp fingers: the 6.5 cm bottle is thinner than the grasp's can
-TILT = math.radians(98)                        # about the robot's x, around the palm: the bottle top swings left
+TILT = math.radians(98)                        # pour axis: this far from vertical, leaning left (toward the cup)
 HOLD_S = 1.5
 POUR_TILT_MIN, POUR_HOLD_S = math.radians(90), 1.0
 HEAD_PITCH_UP = 9.0                            # deg, matched to wandb ra28b9f's first head frame
@@ -144,6 +144,7 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         self._seen = {}
         self._palm_lifted = None
         self._weld_done = False
+        self._start = np.zeros(3)
 
     @property
     def container(self) -> Actor:
@@ -154,6 +155,7 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         super().reset(seed, options)
         self._instruction = "g1/pick_bottle_and_pour_into_cup"   # psi0's task string, as the real suite reads it
         self._container = self.layout.actors.get("container")
+        self._start = np.array(self.layout.actors["target"].pose.position, dtype=float)   # the layout follows the sim later
         if "table2" in self.layout.actors:          # MaterialDR dresses the board only
             self.layout.actors["table2"].set_material(_OSB)
         for key in ("target", "container"):          # PET and PP, never metal: MaterialDR draws metallic up to 1
@@ -197,7 +199,7 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         i = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_EQUALITY, "demo_weld")
         if i < 0:
             return
-        start_z = self.target.pose.position[2]
+        start_z = self._start[2]
         if not d.eq_active[i]:
             if bottle[2] > start_z + 0.01 and self._in_hand(mujoco_env):
                 b1, b2 = m.eq_obj1id[i], m.eq_obj2id[i]
@@ -255,7 +257,7 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
                                                  MoveEEFToPoseSpec, OpenGripperSpec, PhaseBreakSpec,
                                                  RetreatSpec, StandSpec)
 
-        start = np.asarray(self.target.pose.position, dtype=float)   # the layout keeps the spawn pose
+        start = self._start                                           # spawn pose: the layout follows the sim
         now = self._seen.get("target")
         centre = np.asarray(now[:3], dtype=float) if now is not None else start
         axis = self._axis_and_cap(now)[0] if now is not None else np.array([0.0, 0.0, 1.0])
@@ -266,7 +268,12 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         cap = centre + axis * h
         palm = self._seen.get("palm")
         palm = palm if palm is not None else centre
-        R = t3d.euler.euler2mat(-TILT, 0.0, 0.0)
+        # the tilt turns the bottle's present axis onto the pour axis: whatever lean the grip left is absorbed
+        pour_axis = np.array([0.0, math.sin(TILT), math.cos(TILT)])
+        k = np.cross(axis, pour_axis)
+        angle = math.atan2(np.linalg.norm(k), float(np.dot(axis, pour_axis)))
+        R = t3d.axangles.axangle2mat(k / np.linalg.norm(k), angle) if np.linalg.norm(k) > 1e-9 else np.eye(3)
+        tilt_rpy, untilt_rpy = t3d.euler.mat2euler(R), t3d.euler.mat2euler(R.T)
         cap_tilted = palm + R @ (cap - palm)              # where the tilt about the palm takes the cap
         target_cap = rim + [0.0, 0.0, CAP_CLEAR]
         to_cup = target_cap - cap_tilted                   # move first, then tilt: the cap lands over the rim
@@ -292,11 +299,11 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
             MoveEEFToPoseSpec("to_cup", delta_position=tuple(to_cup), **_HELD),
             PhaseBreakSpec("near_cup", grasp_type="bodex"),
             MoveEEFToPoseSpec("align", delta_position=tuple(to_cup), **_HELD),      # the rest, waist still
-            MoveEEFToPoseSpec("tilt", delta_rpy=(-TILT, 0.0, 0.0), hold_steps=hold, **_HELD),
-            MoveEEFToPoseSpec("untilt", delta_rpy=(TILT, 0.0, 0.0), **_HELD),
+            MoveEEFToPoseSpec("tilt", delta_rpy=tilt_rpy, hold_steps=hold, **_HELD),
+            MoveEEFToPoseSpec("untilt", delta_rpy=untilt_rpy, **_HELD),
             PhaseBreakSpec("poured", grasp_type="bodex"),
             MoveEEFToPoseSpec("level", delta_rpy=level, **_HELD),
-            MoveEEFToPoseSpec("back", delta_position=tuple(back), **_HELD),
+            MoveEEFToPoseSpec("back", delta_position=tuple(back), **_HAND),      # waist free: the weld holds, placing is coarse
             LowerSpec("lower", down=PLACE_GAP - 0.004, **_HAND),
             OpenGripperSpec("release", **_HAND),
             RetreatSpec("retreat", **_HAND),

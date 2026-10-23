@@ -53,12 +53,19 @@ def record(obs, info):
                       "tilt_deg": round(math.degrees(math.acos(float(np.clip(axis[2], -1, 1)))), 1),
                       "cap_rim_xy": round(float(np.linalg.norm(cap[:2] - rim[:2])), 3),
                       "cap_above_rim": round(float(cap[2] - rim[2]), 3), "poured": task._poured,
-                      "in_hand": task._in_hand(env.unwrapped.mujoco)})
+                      "in_hand": task._in_hand(env.unwrapped.mujoco), "weld": _weld_state()})
     if step % 6 == 0:
         for k in ("head_stereo_left",):
             if k in obs:
                 Image.fromarray(np.asarray(obs[k])[..., :3]).save(out / "frames" / f"ep{ep}_{k}_{step:05d}.png")
     step += 1
+
+
+def _weld_state():
+    import mujoco
+    mj = env.unwrapped.mujoco
+    i = mujoco.mj_name2id(mj.mjModel, mujoco.mjtObj.mjOBJ_EQUALITY, "demo_weld")
+    return None if i < 0 else int(mj.mjData.eq_active[i])
 
 
 summary = []
