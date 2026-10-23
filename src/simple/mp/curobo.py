@@ -144,6 +144,7 @@ class CuRoboPlanner(MotionPlanner):
             self.motion_gen.update_world(world_cfg)
 
         debug_grasp = kwargs.pop("debug_grasp", None)
+        squeeze = kwargs.pop("squeeze", 0.2)   # rad the fingers close past the pregrasp
         # for i in range(num_waypoints):
         with timer(f"approach"):
             tensor_args = TensorDeviceType()
@@ -243,7 +244,7 @@ class CuRoboPlanner(MotionPlanner):
                     for i in range(0, 20, 1):
                         squeeze_pose_qposs.append(np.concatenate(
                             [mogen_result_traj[-1][:ee_hand_start_idx],
-                            mogen_result_traj[-1][ee_hand_start_idx:ee_hand_start_idx+hand_dof] + squeeze_dir * (i+1)/20 * 0.2,
+                            mogen_result_traj[-1][ee_hand_start_idx:ee_hand_start_idx+hand_dof] + squeeze_dir * (i+1)/20 * squeeze,
                             mogen_result_traj[-1][ee_hand_start_idx+hand_dof:],
                             ], axis=-1
                         )[None, :])

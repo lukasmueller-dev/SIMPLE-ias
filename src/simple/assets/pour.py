@@ -20,6 +20,7 @@ Pour_Object_Names = {
 
 class PourAsset(Graspnet1BAsset):
     symmetric_z = True   # Bodex.load_cached_grasps: grasps ignore the yaw the scene draws
+    friction = (1.5, 0.3, 0.01)   # MuJoCo sliding, torsional, rolling: Dex3 rubber on PET; the default 0.05 lets a held bottle pivot out
 
     def to_dict(self) -> dict[str, Any]:
         return {**super().to_dict(), "res_id": "pour"}

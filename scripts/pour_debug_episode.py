@@ -26,6 +26,7 @@ from simple.tasks import g1_wholebody_pour_mp as pour
 ap = argparse.ArgumentParser()
 ap.add_argument("out")
 ap.add_argument("--seed", type=int, default=0)
+ap.add_argument("--episodes", type=int, default=1)
 ap.add_argument("--ignore-target-collision", action="store_true")
 a = ap.parse_args()
 out = Path(a.out)
@@ -39,7 +40,6 @@ sys.stdout = open(out / "stdout.log", "w", buffering=1)   # Isaac keeps print() 
 planner = CuRoboPlanner(robot=task.robot, plan_dt=0.01, plan_batch_size=1,
                         ignore_target_collisions=a.ignore_target_collision)
 agent = MotionPlannerAgent(task, planner)
-obs, info = env.reset(seed=a.seed)
 trace, step, phase, events = [], 0, 1, []
 
 
@@ -52,36 +52,47 @@ def record(obs, info):
         trace.append({"step": step, "phase": phase, "bottle": np.round(b[:3], 3).tolist(),
                       "tilt_deg": round(math.degrees(math.acos(float(np.clip(axis[2], -1, 1)))), 1),
                       "cap_rim_xy": round(float(np.linalg.norm(cap[:2] - rim[:2])), 3),
-                      "cap_above_rim": round(float(cap[2] - rim[2]), 3), "poured": task._poured})
-    if step % 3 == 0:
-        for k in ("head_stereo_left", "side_left"):
+                      "cap_above_rim": round(float(cap[2] - rim[2]), 3), "poured": task._poured,
+                      "in_hand": task._in_hand(env.unwrapped.mujoco)})
+    if step % 6 == 0:
+        for k in ("head_stereo_left",):
             if k in obs:
-                Image.fromarray(np.asarray(obs[k])[..., :3]).save(out / "frames" / f"{k}_{step:05d}.png")
+                Image.fromarray(np.asarray(obs[k])[..., :3]).save(out / "frames" / f"ep{ep}_{k}_{step:05d}.png")
     step += 1
 
 
-record(obs, info)
-done = False
-while not done:
-    state = agent.synthesize()
-    names = [sp.phase for sp in task.decompose()]
-    events.append({"step": step, "synthesize": str(state), "spec": names[agent._subtask_index - 1]})
-    if state is False:
-        break
-    while True:
-        try:
-            action = agent.get_action(obs, info)
-        except StopIteration:
-            events.append({"step": step, "event": "queue empty"})
+summary = []
+for ep in range(a.episodes):
+    trace, step, phase, events = [], 0, 1, []
+    agent.reset()
+    obs, info = env.reset(seed=a.seed + ep)
+    record(obs, info)
+    done = False
+    while not done:
+        state = agent.synthesize()
+        names = [sp.phase for sp in task.decompose()]
+        events.append({"step": step, "synthesize": str(state), "spec": names[agent._subtask_index - 1]})
+        if state is False:
             break
-        obs, reward, terminated, truncated, info = env.step(action)
-        record(obs, info)
-        if terminated or truncated:
-            events.append({"step": step, "event": "terminated" if terminated else "truncated"})
-            done = True
+        while True:
+            try:
+                action = agent.get_action(obs, info)
+            except StopIteration:
+                events.append({"step": step, "event": "queue empty"})
+                break
+            obs, reward, terminated, truncated, info = env.step(action)
+            record(obs, info)
+            if terminated or truncated:
+                events.append({"step": step, "event": "terminated" if terminated else "truncated"})
+                done = True
+                break
+        if state != "phase_break":
             break
-    if state != "phase_break":
-        break
-    phase += 1
-(out / "trace.json").write_text(json.dumps({"events": events, "trace": trace}, indent=0))
+        phase += 1
+    (out / f"trace_ep{ep}.json").write_text(json.dumps({"events": events, "trace": trace}, indent=0))
+    last = trace[-1] if trace else {}
+    summary.append({"ep": ep, "events": events, "max_tilt": max((r["tilt_deg"] for r in trace), default=0),
+                    "min_cap_rim_xy": min((r["cap_rim_xy"] for r in trace), default=9), "poured": task._poured,
+                    "last": last})
+    (out / "summary.json").write_text(json.dumps(summary, indent=1))
 env.close()

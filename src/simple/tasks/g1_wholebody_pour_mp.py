@@ -4,7 +4,7 @@
 pours into an orange cup on its left, puts the bottle back upright and lets go.
 
 A twin of the IAS lab scene for fine-tuning psi0's real task3 checkpoint. The robot faces the 120 cm
-side, centred; the bottle stands 20 cm from the edge in front of the right hand, the cup 15 cm to its left.
+side, centred; the bottle stands 22 cm from the edge in front of the right hand, the cup 11 cm to its left.
 Success (SIMPLE_POUR_SUCCESS=pour, the default): the bottle axis tilts 90 deg or more with the cap
 inside the cup's rim circle and above the rim, for 1 s. SIMPLE_POUR_SUCCESS=place (datagen) also
 needs the bottle back upright on the table and out of the hand, so demos end after the release.
@@ -34,14 +34,17 @@ TABLE_X = 0.0                                  # table centre; near edge at TABL
 EDGE_X = TABLE_X - 0.5 * TABLE_DEPTH
 ROBOT_X = EDGE_X - 0.12                        # pelvis 12 cm behind the edge, ~17 cm once AMO's stance settles (the real video)
 ROBOT_Z = 0.785                                # G1Wholebody.z_offset: the robot frame is its pelvis
-BOTTLE_XY = (EDGE_X + 0.20, -0.10)            # in front of the right hand, as in the lab photos: the right arm
-CUP_XY = (EDGE_X + 0.20, 0.05)                 # cannot reach the midline at 63 cm; cup 15 cm left of the bottle
-JITTER = 0.04
+BOTTLE_XY = (EDGE_X + 0.22, -0.10)            # in front of the right hand, as in the lab photos: the right arm
+CUP_XY = (EDGE_X + 0.22, 0.01)                 # cannot reach the midline at 63 cm; cup 11 cm left: the tilt alone swings the cap ~12 cm
+JITTER = 0.03
 
 BOTTLE_H, CUP_H, CUP_RIM_R = 0.215, 0.090, 0.037   # scripts/make_pour_assets.py
-LIFT, CLEAR_Z = 0.10, 0.10                     # lift, then this much more before the tilt
+LIFT = 0.10
+PLACE_GAP = 0.02                               # the return move stops this high over the table, the lower does the rest
+CAP_CLEAR = 0.05                               # cap height over the rim while pouring
 SQUAT = -0.12                                  # AMO height command: a 63 cm table is low for a standing G1
-TILT = math.radians(95)                        # about the robot's x: the bottle top swings left
+SQUEEZE = 0.50                                 # rad past the pregrasp fingers: the 6.5 cm bottle is thinner than the grasp's can
+TILT = math.radians(98)                        # about the robot's x, around the palm: the bottle top swings left
 HOLD_S = 1.5
 POUR_TILT_MIN, POUR_HOLD_S = math.radians(90), 1.0
 HEAD_PITCH_UP = 9.0                            # deg, matched to wandb ra28b9f's first head frame
@@ -59,6 +62,8 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
     label: str = "G1 Wholebody Pour MP"
     description: str = "The G1 grasps a bottle on the table, pours into the cup next to it and puts the bottle back."
     keep_ground_at_world_origin = True         # floor at z = 0 (pelvis spawned at ROBOT_Z); upstream puts the table top there
+    # datagen only: the bottle is welded to the wrist from lift to put-down, so a 3-finger pinch cannot drop it mid-pour
+    demo_weld = ("target", "right_wrist_yaw_link") if os.environ.get("SIMPLE_POUR_SUCCESS") == "place" else None
 
     metadata: dict[str, Any] = {
         "physics_dt": 0.002,
@@ -85,17 +90,6 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
             baseline=0.05,
             # 9 deg up on the head link: the far table edge then sits where the real t=0 frame has it
             pose=dict(position=[0.0, 0.0, 0.0], quaternion=t3d.euler.euler2quat(0.0, math.radians(-HEAD_PITCH_UP), 0.0).tolist()),
-        ),
-        side_left=CameraCfg(
-            uid="Realsense_D415_mono",
-            mount="eye_on_base",
-            width=640,
-            height=360,
-            focal_length=1.88,
-            fov=np.deg2rad(71.28),
-            near=0.2,
-            far=5,
-            pose=dict(position=[ROBOT_X + 0.35, 0.9, 1.1], eulers=np.deg2rad([0, 35, -90])),
         ),
     )
 
@@ -147,6 +141,9 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         self._container = None
         self._pour_steps = 0
         self._poured = False
+        self._seen = {}
+        self._palm_lifted = None
+        self._weld_done = False
 
     @property
     def container(self) -> Actor:
@@ -163,6 +160,9 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
             self.layout.actors[key].set_material(_PLASTIC)
         self._pour_steps = 0
         self._poured = False
+        self._seen = {}
+        self._palm_lifted = None
+        self._weld_done = False
 
     def preload_objects(self) -> list[Actor]:
         from simple.assets import AssetManager
@@ -188,8 +188,44 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
                 return True
         return False
 
+    def _update_weld(self, mujoco_env, bottle):
+        """demo_weld on once the bottle is held and 1 cm up, off for good once it is back at table height."""
+        if self.demo_weld is None or mujoco_env is None or bottle is None or self._weld_done:
+            return
+        import mujoco
+        m, d = mujoco_env.mjModel, mujoco_env.mjData
+        i = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_EQUALITY, "demo_weld")
+        if i < 0:
+            return
+        start_z = self.target.pose.position[2]
+        if not d.eq_active[i]:
+            if bottle[2] > start_z + 0.01 and self._in_hand(mujoco_env):
+                b1, b2 = m.eq_obj1id[i], m.eq_obj2id[i]
+                q1 = np.asarray(d.xquat[b1])
+                m.eq_data[i][0:3] = 0.0
+                m.eq_data[i][3:6] = t3d.quaternions.quat2mat(q1).T @ (np.asarray(d.xpos[b2]) - np.asarray(d.xpos[b1]))
+                m.eq_data[i][6:10] = t3d.quaternions.qmult(t3d.quaternions.qinverse(q1), np.asarray(d.xquat[b2]))
+                m.eq_data[i][10] = 1.0
+                d.eq_active[i] = 1
+        elif self._poured and abs(bottle[2] - start_z) < 0.012 and self._axis_and_cap(bottle)[0][2] > math.cos(math.radians(10)):
+            d.eq_active[i] = 0
+            self._weld_done = True
+
+    def _palm(self, mujoco_env):
+        """World position of the planner's right palm link (URDF: right_wrist_yaw_link + 4.15 cm), or None."""
+        if mujoco_env is None:
+            return None
+        model, data = mujoco_env.mjModel, mujoco_env.mjData
+        if getattr(self, "_wrist_id", None) is None:
+            names = [model.body(i).name for i in range(model.nbody)]
+            self._wrist_id = next(i for i, n in enumerate(names) if n.endswith("right_wrist_yaw_link"))
+        R = np.asarray(data.xmat[self._wrist_id]).reshape(3, 3)
+        return np.asarray(data.xpos[self._wrist_id]) + R @ np.array([0.0415, -0.003, 0.0])
+
     def compute_reward(self, info: dict[str, Any], *args, **kwargs) -> float:
         bottle, cup = info.get("target"), info.get("container")
+        self._seen = {"target": bottle, "container": cup, "palm": self._palm(kwargs.get("mujoco_env"))}
+        self._update_weld(kwargs.get("mujoco_env"), bottle)
         if bottle is None or cup is None:
             return 0.0
         axis, cap = self._axis_and_cap(bottle)
@@ -214,28 +250,54 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
     # ------------------------------------------------------------------ demo
 
     def decompose(self):
+        """Re-read at each phase break with the bottle where the sim has it (compute_reward caches it)."""
         from simple.datagen.subtask_spec import (GraspObjectSpec, HeightAdjustSpec, LiftSpec, LowerSpec,
                                                  MoveEEFToPoseSpec, OpenGripperSpec, PhaseBreakSpec,
                                                  RetreatSpec, StandSpec)
 
-        bottle = np.asarray(self.target.pose.position)
-        cup = np.asarray(self.container.pose.position)
-        # a 100 deg tilt about x swings the cap about 6 cm left of the bottle axis (palm on its right)
-        to_cup = (cup[0] - bottle[0], cup[1] - bottle[1] - 0.06, CLEAR_Z)
-        back = tuple(-d for d in to_cup)
+        start = np.asarray(self.target.pose.position, dtype=float)   # the layout keeps the spawn pose
+        now = self._seen.get("target")
+        centre = np.asarray(now[:3], dtype=float) if now is not None else start
+        axis = self._axis_and_cap(now)[0] if now is not None else np.array([0.0, 0.0, 1.0])
+        seen_cup = self._seen.get("container")
+        cup = np.asarray(seen_cup[:3] if seen_cup is not None else self.container.pose.position, dtype=float)
+        rim = cup + [0.0, 0.0, 0.5 * CUP_H]
+        h = 0.5 * BOTTLE_H
+        cap = centre + axis * h
+        palm = self._seen.get("palm")
+        palm = palm if palm is not None else centre
+        R = t3d.euler.euler2mat(-TILT, 0.0, 0.0)
+        cap_tilted = palm + R @ (cap - palm)              # where the tilt about the palm takes the cap
+        target_cap = rim + [0.0, 0.0, CAP_CLEAR]
+        to_cup = target_cap - cap_tilted                   # move first, then tilt: the cap lands over the rim
+        # level: turn the axis back onto z (tilt x first, then y); a few degrees are left as they are
+        level = (math.atan2(axis[1], axis[2]), -math.asin(float(np.clip(axis[0], -1.0, 1.0))), 0.0)
+        if math.degrees(math.acos(float(np.clip(axis[2], -1.0, 1.0)))) < 3.0:
+            level = (0.0, 0.0, 0.0)
+        # back: the palm returns to where it stood after the lift, a pose this locked waist reached
+        if self._palm_lifted is None and centre[2] > start[2] + 0.06 and palm is not centre:
+            self._palm_lifted, self._z_lifted = np.array(palm), float(centre[2])
+        back = (self._palm_lifted - palm) if self._palm_lifted is not None else np.zeros(3)
+        if self._palm_lifted is not None:                  # and down to 2 cm over the bottle's spot on the table
+            back = back + [0.0, 0.0, -(self._z_lifted - start[2] - PLACE_GAP)]
+        hold = int(HOLD_S * self.metadata["render_hz"])
         return [
             StandSpec("initialize"),
             HeightAdjustSpec("squat", height=SQUAT, keep_waist_pose=True),
             PhaseBreakSpec("settle", grasp_type="bodex"),
-            GraspObjectSpec("approach", target_uid=self.target.uid, pregrasp=False,
+            GraspObjectSpec("approach", target_uid=self.target.uid, pregrasp=False, squeeze=SQUEEZE,
                             lock_links=["left_hand_palm_link"], **_HAND),   # waist free: the torso leans in, as task3's data does
             LiftSpec("lift", up=LIFT, **_HAND),
-            MoveEEFToPoseSpec("to_cup", delta_position=to_cup, **_HELD),
-            MoveEEFToPoseSpec("tilt", delta_rpy=(-TILT, 0.0, 0.0),
-                              hold_steps=int(HOLD_S * self.metadata["render_hz"]), **_HELD),
+            PhaseBreakSpec("lifted", grasp_type="bodex"),
+            MoveEEFToPoseSpec("to_cup", delta_position=tuple(to_cup), **_HELD),
+            PhaseBreakSpec("near_cup", grasp_type="bodex"),
+            MoveEEFToPoseSpec("align", delta_position=tuple(to_cup), **_HELD),      # the rest, waist still
+            MoveEEFToPoseSpec("tilt", delta_rpy=(-TILT, 0.0, 0.0), hold_steps=hold, **_HELD),
             MoveEEFToPoseSpec("untilt", delta_rpy=(TILT, 0.0, 0.0), **_HELD),
-            MoveEEFToPoseSpec("back", delta_position=back, **_HAND),      # waist free again: placing needs less precision
-            LowerSpec("lower", down=LIFT - 0.005, **_HAND),
+            PhaseBreakSpec("poured", grasp_type="bodex"),
+            MoveEEFToPoseSpec("level", delta_rpy=level, **_HELD),
+            MoveEEFToPoseSpec("back", delta_position=tuple(back), **_HELD),
+            LowerSpec("lower", down=PLACE_GAP - 0.004, **_HAND),
             OpenGripperSpec("release", **_HAND),
             RetreatSpec("retreat", **_HAND),
         ]

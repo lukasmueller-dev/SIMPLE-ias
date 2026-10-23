@@ -374,7 +374,8 @@ class MotionPlannerAgent(PrimitiveAgent):
                             debug_grasp=grasps[0],
                             world_layout=self.task.layout, # collision avoidance
                             lock_links_names=lock_links_names,
-                            current_joint_qpos=current_joint_qpos
+                            current_joint_qpos=current_joint_qpos,
+                            squeeze=spec.meta.get("squeeze", 0.2),
                         )
                     else:
                         raise ValueError(f"Unsupported grasp type: {grasp_type}")
@@ -447,6 +448,9 @@ class MotionPlannerAgent(PrimitiveAgent):
                 except Exception as e:
                     # raise e
                     print(f"Lower planning failed with error: {e}")
+                    return False
+                if not traj:
+                    print("Lower planning gave an empty path")
                     return False
                 
                 self.queue_follow_path_with_eef(traj, "close_eef")
@@ -608,18 +612,23 @@ class MotionPlannerAgent(PrimitiveAgent):
     
     def _relative_goal(self, meta):
         """World goal: the hand at the end of the last planned path, moved by `delta_position` (m)
-        and turned by `delta_rpy` (rad, about the robot frame's axes, around the palm)."""
+        and turned by `delta_rpy` (rad, about the robot frame's axes, around the palm or `pivot`)."""
         q = self._last_traj_qpos
         solver = self.planner.init_js_ik_solver
         if isinstance(q, dict):
             q = [q[name] for name in solver.joint_names]
         q = np.asarray(q, dtype=np.float32)[:solver.dof]
         ee = solver.fk(torch.tensor(q, device="cuda", dtype=torch.float32)[None]).ee_pose
+        T_world_robot = self.task.layout.actors["robot"].pose.as_matrix()
+        R = t3d.euler.euler2mat(*meta.get("delta_rpy", (0, 0, 0)))
+        p = ee.position.cpu().numpy()[0] + np.asarray(meta.get("delta_position", (0, 0, 0)))
+        if meta.get("pivot") is not None:   # turn about this world point (e.g. the held object's centre)
+            pivot = (np.linalg.inv(T_world_robot) @ np.append(meta["pivot"], 1.0))[:3]
+            p = pivot + R @ (p - pivot)
         T = np.eye(4)
-        T[:3, 3] = ee.position.cpu().numpy()[0] + np.asarray(meta.get("delta_position", (0, 0, 0)))
-        T[:3, :3] = t3d.euler.euler2mat(*meta.get("delta_rpy", (0, 0, 0))) @ t3d.quaternions.quat2mat(
-            ee.quaternion.cpu().numpy()[0])
-        T_world = self.task.layout.actors["robot"].pose.as_matrix() @ T
+        T[:3, 3] = p
+        T[:3, :3] = R @ t3d.quaternions.quat2mat(ee.quaternion.cpu().numpy()[0])
+        T_world = T_world_robot @ T
         return T_world[:3, 3], t3d.quaternions.mat2quat(T_world[:3, :3])
 
     def reset(self):

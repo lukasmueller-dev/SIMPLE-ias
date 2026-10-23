@@ -212,6 +212,17 @@ class MujocoSimulator(Simulator):
         # add some friction for contact stability
         ground.friction = [1.0, 0.005, 0.0001]  # [sliding, torsional, rolling]
 
+        # a task may weld a held object to a robot body while it generates demos (off until the task turns it on)
+        weld = getattr(self.task, "demo_weld", None)   # (layout actor key, robot body name)
+        if weld is not None and weld[0] in self.task.layout.actors:
+            eq = mjSpec.add_equality()
+            eq.name = "demo_weld"
+            eq.type = mujoco.mjtEq.mjEQ_WELD
+            eq.objtype = mujoco.mjtObj.mjOBJ_BODY
+            eq.name1 = self.task.layout.actors[weld[0]].asset.label
+            eq.name2 = weld[1]
+            eq.active = False
+
         # 5. disable gravity (for better PID control of arms)
         self.mjModel=mjSpec.compile()
         self.mjData=mujoco.MjData(self.mjModel)
@@ -347,8 +358,8 @@ class MujocoSimulator(Simulator):
                 condim=4,  
                 # total mass 0.1 helps preventing slipping
                 mass=0.1/num_convex, 
-                # rubber on rough ground: large static, sliding and torisonal friction
-                friction=[0.8, 0.05, 0.005],  
+                # rubber on rough ground: large static, sliding and torisonal friction; an asset may set its own
+                friction=list(getattr(actor.asset, "friction", [0.8, 0.05, 0.005])),  
                 rgba=[1, 1, 1, 1],
                 # stiff contact and no oscillation
                 solref = [0.005, 2]

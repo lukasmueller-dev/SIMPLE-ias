@@ -25,7 +25,7 @@ SRC, DST, HAND = "10", "900", "dex3_right"
 CAN_R, BOTTLE_R, BOTTLE_H = 0.0402, 0.0325, 0.215
 ALONG, OUT = 0.055, 0.061          # bottle axis in the can grasp's palm frame: along the fingers, out of the palm
 GRASP_Z = 0.090                    # palm height above the bottle base
-PRE_GAP = 0.015                    # the pregrasp palm stands this much further out
+PRE_GAP = 0.012                    # the planner stops at the pregrasp and squeezes there: clear of the bottle
 YAWS = np.deg2rad([-20, -10, 0, 10, 20, 30])   # about the bottle axis; 0 = fingers straight ahead
 CLOSE_DIR = np.array([0.0, -1, -1, 1, 1, 1, 1])  # BODex joint order; SIMPLE's squeeze_dir, reordered
 
@@ -57,5 +57,5 @@ def main(pre_close):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pre-close", type=float, default=0.2)
+    ap.add_argument("--pre-close", type=float, default=0.0)
     main(ap.parse_args().pre_close)
