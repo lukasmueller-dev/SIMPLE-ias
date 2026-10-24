@@ -22,7 +22,19 @@ ap.add_argument("save_dir")
 ap.add_argument("--scenes", type=int, default=20)
 ap.add_argument("--seed", type=int, default=1000, help="first scene's seed; scene i uses seed + i")
 ap.add_argument("--steps", type=int, default=5, help="standing frames per episode")
+ap.add_argument("--twin", action="store_true", help="the lab twin: every range at its centre, Coke Zero, orange cup, OSB")
 a = ap.parse_args()
+if a.twin:
+    from simple.dr.types import Box
+    from simple.tasks import g1_wholebody_pour_mp as pour
+    dr = pour.G1WholebodyPourMP.dr_cfgs
+    mid = lambda b: Box(low=b.middle(), high=b.middle())   # noqa: E731
+    sp, sc = dr["spatial"], dr["scene"]
+    sp.robot_region, sp.target_region, sp.container_region = mid(sp.robot_region), mid(sp.target_region), mid(sp.container_region)
+    sp.robot_orientation_region = Box(low=[1.0, 0.0, 0.0, 0.0], high=[1.0, 0.0, 0.0, 0.0])
+    sc.table_height = mid(sc.table_height)
+    dr["target"].asset_choices, dr["container"].asset_choices = {"920": 1.0}, {"901": 1.0}
+    dr["material"].table_material = pour._OSB
 
 
 class _Idle:
