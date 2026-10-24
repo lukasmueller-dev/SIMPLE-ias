@@ -49,7 +49,7 @@ SQUEEZE = 0.50                                 # rad past the pregrasp fingers: 
 TILT = math.radians(98)                        # pour axis: this far from vertical, leaning left (toward the cup)
 HOLD_S = 1.5
 POUR_TILT_MIN, POUR_HOLD_S = math.radians(90), 1.0
-HEAD_PITCH_UP = 9.0                            # deg, matched to wandb ra28b9f's first head frame
+HEAD_PITCH_UP = -3.0                           # deg (negative: down); ra28b9f's first head frame at its 42 cm stance
 
 _OSB = {"path": "data/vMaterials_2/Wood/OSB_Wood.mdl", "name": "OSB_Wood"}
 _BOARDS = [dict(_OSB, weight=0.5),                # the lab's board half the time, other table tops the rest
@@ -140,7 +140,7 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
             light_mode="random",
             light_num=(2, 3),
             light_color_temperature=Box(low=4000, high=6500),
-            light_intensity=Box(low=1e4 * 0.7, high=1e4 * 1.3),
+            light_intensity=Box(low=2e4 * 0.7, high=2e4 * 1.3),   # the real head frames are bright: x2 matched them
             light_radius=Box(0.08, 0.12),
             light_length=Box(0.51, 1.1),
             light_spacing=Box((1.0, 1.0), (2.0, 2.0)),
