@@ -1,6 +1,7 @@
 # Copyright (c) 2025-2026 The SIMPLE Authors
 # SPDX-License-Identifier: MIT
-"""Pour-task assets: a Coke Zero 0.5 L bottle (900) and an orange plastic cup (901), as revolved meshes.
+"""Pour-task assets: a Coke Zero 0.5 L bottle (900) and an orange plastic cup (901), as revolved meshes,
+and their look variants (LOOKS: same shapes, other materials and labels).
 
     uv run --with usd-core --with trimesh --with pillow python scripts/make_pour_assets.py <data>/assets/pour
 
@@ -10,6 +11,7 @@ stable/<id>_stable.npy. Profiles are nominal until measured: (z, r) in metres fr
 """
 
 import sys
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -156,6 +158,140 @@ def cup_visual():
     return np.vstack([vo, vi]), np.vstack([fo, fi, np.array(rim)]), np.vstack([uo, ui])
 
 
+# look variants: (uid, shape, body, label, cap). body: ("glass", rgb) clear or tinted PET / cup, or ("pbr", rgb) a
+# full bottle's liquid or an opaque cup; label: a brand drawing or None; cap: rgb. Physics and grasps stay 900/901's.
+COLA, ORANGE, LEMON = (40, 18, 10), (245, 120, 10), (200, 230, 150)
+CLEAR, GREEN_PET = (235, 240, 240), (150, 210, 160)
+LOOKS = [
+    (902, 900, ("glass", CLEAR), "zero", (12, 12, 12)),
+    (920, 900, ("pbr", COLA), "zero", (12, 12, 12)),
+    (910, 900, ("pbr", COLA), "cola", (200, 16, 30)),
+    (911, 900, ("glass", CLEAR), "cola", (200, 16, 30)),
+    (912, 900, ("pbr", ORANGE), "orange", (20, 60, 160)),
+    (913, 900, ("glass", CLEAR), "orange", (20, 60, 160)),
+    (914, 900, ("glass", GREEN_PET), "lemon", (30, 140, 50)),
+    (915, 900, ("glass", CLEAR), "water", (40, 110, 220)),
+    (916, 900, ("glass", CLEAR), "stripes0", (230, 230, 230)),
+    (917, 900, ("pbr", (90, 30, 120)), "stripes1", (240, 200, 20)),
+    (918, 900, ("glass", GREEN_PET), "stripes2", (200, 40, 40)),
+    (919, 900, ("pbr", (230, 200, 60)), "stripes3", (20, 20, 20)),
+    (931, 901, ("pbr", (200, 25, 25)), None, None),
+    (932, 901, ("pbr", (30, 80, 200)), None, None),
+    (933, 901, ("pbr", (235, 235, 230)), None, None),
+    (934, 901, ("pbr", (40, 160, 60)), None, None),
+    (935, 901, ("glass", (230, 235, 240)), None, None),
+]
+
+
+def label_texture(path, brand):
+    """The label band only (u around, v over the band, row 0 = top)."""
+    w, h = 512, 256
+    rng = np.random.default_rng(zlib.crc32(brand.encode()))
+    base = {"zero": (18, 18, 18), "cola": (200, 16, 30), "orange": (20, 60, 160), "lemon": (30, 140, 50),
+            "water": (200, 225, 245)}.get(brand, tuple(int(c) for c in rng.integers(30, 230, 3)))
+    img = Image.new("RGB", (w, h), base)
+    d = ImageDraw.Draw(img)
+    if brand in ("zero", "cola"):
+        for cx in (w // 4, 3 * w // 4):
+            if brand == "zero":
+                d.ellipse([cx - 45, h // 2 - 45, cx + 45, h // 2 + 45], fill=(200, 16, 30))
+            d.rectangle([cx - 90, h // 2 - 9, cx + 90, h // 2 + 9], fill=(235, 235, 235))
+    elif brand == "orange":
+        for cx in (w // 4, 3 * w // 4):
+            d.ellipse([cx - 60, h // 2 - 60, cx + 60, h // 2 + 60], fill=(245, 120, 10))
+    elif brand == "lemon":
+        d.rectangle([0, h // 2 - 20, w, h // 2 + 20], fill=(230, 230, 60))
+    elif brand == "water":
+        d.rectangle([0, h // 3, w, 2 * h // 3], fill=(40, 110, 220))
+    else:                                         # generic: random stripes
+        for _ in range(int(rng.integers(2, 6))):
+            y0 = int(rng.integers(0, h - 20))
+            d.rectangle([0, y0, w, y0 + int(rng.integers(8, 60))], fill=tuple(int(c) for c in rng.integers(0, 255, 3)))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path)
+
+
+def _shader(stage, name, kind, rgb=None, texture=None, rough=0.3):
+    mat = UsdShade.Material.Define(stage, f"/World/Looks/{name}")
+    sh = UsdShade.Shader.Define(stage, f"/World/Looks/{name}/{name}")
+    col = Gf.Vec3f(*(c / 255 for c in rgb)) if rgb is not None else None
+    if kind == "glass":
+        sh.SetSourceAsset(Sdf.AssetPath("OmniGlass.mdl"), "mdl")
+        sh.SetSourceAssetSubIdentifier("OmniGlass", "mdl")
+        sh.CreateInput("glass_color", Sdf.ValueTypeNames.Color3f).Set(col)
+        sh.CreateInput("glass_ior", Sdf.ValueTypeNames.Float).Set(1.45)
+        sh.CreateInput("thin_walled", Sdf.ValueTypeNames.Bool).Set(True)
+        sh.CreateInput("frosting_roughness", Sdf.ValueTypeNames.Float).Set(0.05)
+    else:
+        sh.SetSourceAsset(Sdf.AssetPath("OmniPBR.mdl"), "mdl")
+        sh.SetSourceAssetSubIdentifier("OmniPBR", "mdl")
+        if texture is not None:
+            sh.CreateInput("diffuse_texture", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(texture))
+        else:
+            sh.CreateInput("diffuse_color_constant", Sdf.ValueTypeNames.Color3f).Set(col)
+        sh.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(rough)
+    mat.CreateSurfaceOutput("mdl").ConnectToSource(sh.ConnectableAPI(), "out")
+    return mat
+
+
+def write_variant_usd(path, verts, tris, uvs, parts):
+    """write_usd's prim layout; `parts` [(name, face indices, material kwargs)] become GeomSubsets of the visual mesh."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stage = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+    UsdGeom.SetStageMetersPerUnit(stage, 0.01)
+    world = UsdGeom.Xform.Define(stage, "/World")
+    stage.SetDefaultPrim(world.GetPrim())
+    for xf in (world, UsdGeom.Xform.Define(stage, "/World/Meshes")):
+        xf.AddTranslateOp().Set(Gf.Vec3d(0, 0, 0))
+        xf.AddOrientOp().Set(Gf.Quatf(1, 0, 0, 0))
+        xf.AddScaleOp().Set(Gf.Vec3f(1, 1, 1))
+    UsdGeom.Scope.Define(stage, "/World/Looks")
+    mats = [(name, faces, _shader(stage, f"material_{k}", **kw)) for k, (name, faces, kw) in enumerate(parts)]
+    for name in ("visual", "collision"):
+        m = UsdGeom.Mesh.Define(stage, f"/World/Meshes/{name}")
+        m.CreatePointsAttr(Vt.Vec3fArray([Gf.Vec3f(*map(float, v)) for v in verts]))
+        m.CreateFaceVertexCountsAttr(Vt.IntArray([3] * len(tris)))
+        m.CreateFaceVertexIndicesAttr(Vt.IntArray([int(i) for i in tris.flatten()]))
+        m.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
+        m.CreateExtentAttr([Gf.Vec3f(*map(float, verts.min(0))), Gf.Vec3f(*map(float, verts.max(0)))])
+        st = UsdGeom.PrimvarsAPI(m).CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex)
+        st.Set(Vt.Vec2fArray([Gf.Vec2f(float(u), float(v)) for u, v in uvs]))
+        if name == "collision":
+            UsdShade.MaterialBindingAPI.Apply(m.GetPrim()).Bind(mats[0][2])
+            UsdGeom.Imageable(m).CreateVisibilityAttr().Set(UsdGeom.Tokens.invisible)
+            continue
+        for part, faces, mat in mats:
+            sub = UsdGeom.Subset.CreateGeomSubset(m, part, UsdGeom.Tokens.face, Vt.IntArray([int(i) for i in faces]),
+                                                  familyName="materialBind")
+            UsdShade.MaterialBindingAPI.Apply(sub.GetPrim()).Bind(mat)
+    stage.GetRootLayer().Save()
+
+
+def write_looks(out):
+    v, f, uv = revolve(BOTTLE)
+    H = BOTTLE[-1][0]
+    zc = v[f].mean(1)[:, 2] + 0.5 * H                        # face centroid height from the base
+    cap = np.where(zc >= BOTTLE_CAP)[0]
+    band = np.where((zc >= BOTTLE_LABEL[0]) & (zc <= BOTTLE_LABEL[1]))[0]
+    body = np.setdiff1d(np.arange(len(f)), np.concatenate([cap, band]))
+    cv, cf, cuv = cup_visual()
+    for uid, shape, (kind, rgb), brand, cap_rgb in LOOKS:
+        usd = out / "ruled_models" / f"{uid}_ruled.usd"
+        if shape == 901:
+            write_variant_usd(usd, cv, cf, cuv, [("body", np.arange(len(cf)), dict(kind=kind, rgb=rgb, rough=0.4))])
+            continue
+        # the band's own uv: v over the label only
+        luv = uv.copy()
+        luv[:, 1] = (luv[:, 1] * H - BOTTLE_LABEL[0]) / (BOTTLE_LABEL[1] - BOTTLE_LABEL[0])
+        tex = f"./textures/{uid}_label.png"
+        label_texture(out / "ruled_models" / "textures" / f"{uid}_label.png", brand)
+        write_variant_usd(usd, v, f, luv, [("body", body, dict(kind=kind, rgb=rgb, rough=0.15)),
+                                          ("label", band, dict(kind="pbr", texture=tex, rough=0.35)),
+                                          ("cap", cap, dict(kind="pbr", rgb=cap_rgb, rough=0.4))])
+    print(f"{len(LOOKS)} look variants")
+
+
 def main(out):
     out = Path(out)
     # bottle
@@ -178,6 +314,7 @@ def main(out):
     write_obj(out / "collision_models_mujoco" / "901" / "901_32x8.obj", sv, sf)
     write_obj(out / "models" / "901" / "coacd_0.05" / "convex_piece_0.obj", sv, sf)
     np.save(out / "stable" / "901_stable.npy", np.array([[0.5, 0.0, 0.5 * CUP_H, 1.0, 0.0, 0.0, 0.0]]))
+    write_looks(out)
     print(f"pour assets -> {out}")
 
 

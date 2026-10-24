@@ -74,7 +74,7 @@ class HssdSceneManager(SceneManager):
         hssd_scenes_dict = {s["uid"]:s for s in self.hssd_scenes}
         scene_name = hssd_scenes_dict[scene_uid]["name"]
 
-        scene_dir = resolve_data_path(f"scenes/hssd/{scene_name}",auto_download=True)
+        scene_dir = resolve_data_path(f"{hssd_scenes_dict[scene_uid]['data_dir']}/{scene_name}", auto_download=True)
         usd_path = os.path.join(scene_dir, f"{scene_name}.usd")
         self._hack_fix_tmp_paths(usd_path)
         

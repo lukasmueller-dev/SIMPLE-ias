@@ -47,7 +47,11 @@ class TargetDR(Randomizer):
         load_kwargs = {}
         if getattr(self.cfg, "size", None) is not None:
             load_kwargs["size"] = self.cfg.size
-        asset = AssetManager.get(self.res_id).load(self.obj_id, **load_kwargs)
+        obj_id = self.obj_id
+        if getattr(self.cfg, "asset_choices", None):   # {obj_id: weight}: a look per episode, same res_id
+            import random
+            obj_id = random.choices(list(self.cfg.asset_choices), weights=list(self.cfg.asset_choices.values()))[0]
+        asset = AssetManager.get(self.res_id).load(obj_id, **load_kwargs)
         # return self.object
 
         # if self.rand_stable_pose:
@@ -61,6 +65,7 @@ class TargetDRCfg(RandomizerCfg):
     # Size for primitive targets (e.g. "primitive:cube"): a scalar for a uniform
     # cube or an [x, y, z] extent in meters. Ignored by mesh assets.
     size: Any | None = None
+    asset_choices: dict[str, float] | None = None   # obj_id -> weight, drawn per reset in place of asset_id's
     randmizer_class: Type[Randomizer] = TargetDR
 
     # def __init__(self, asset_id) -> None:

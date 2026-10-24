@@ -1057,3 +1057,101 @@
   surface2:
     category: dinningtable
     prim_path: /World/furniture/edac4829501b7064951b3e1b3ac2aaae5c1fe251
+
+# the IAS lab room for the pour task, six looks (scripts/make_lab_room.py): Z up, the board at the origin
+
+- uid: lab0
+  data_dir: scenes/lab
+  name: "lab0"
+  default_prim_path: "/World"
+  scale: 1
+  hide_ceilings: false
+  hide_walls: false
+  center_offset_limit_up: [-0.08, -0.12, 0.0]
+  center_offset_limit_down: [0.08, 0.12, 0.0]
+  center_orientation_limit_up: [0, 0, -4]
+  center_orientation_limit_down: [0, 0, 4]
+  table_size: [0.6, 1.2, 0.63]
+  surface:
+    category: board
+    prim_path: /World/surface
+
+- uid: lab1
+  data_dir: scenes/lab
+  name: "lab1"
+  default_prim_path: "/World"
+  scale: 1
+  hide_ceilings: false
+  hide_walls: false
+  center_offset_limit_up: [-0.08, -0.12, 0.0]
+  center_offset_limit_down: [0.08, 0.12, 0.0]
+  center_orientation_limit_up: [0, 0, -4]
+  center_orientation_limit_down: [0, 0, 4]
+  table_size: [0.6, 1.2, 0.63]
+  surface:
+    category: board
+    prim_path: /World/surface
+
+- uid: lab2
+  data_dir: scenes/lab
+  name: "lab2"
+  default_prim_path: "/World"
+  scale: 1
+  hide_ceilings: false
+  hide_walls: false
+  center_offset_limit_up: [-0.08, -0.12, 0.0]
+  center_offset_limit_down: [0.08, 0.12, 0.0]
+  center_orientation_limit_up: [0, 0, -4]
+  center_orientation_limit_down: [0, 0, 4]
+  table_size: [0.6, 1.2, 0.63]
+  surface:
+    category: board
+    prim_path: /World/surface
+
+- uid: lab3
+  data_dir: scenes/lab
+  name: "lab3"
+  default_prim_path: "/World"
+  scale: 1
+  hide_ceilings: false
+  hide_walls: false
+  center_offset_limit_up: [-0.08, -0.12, 0.0]
+  center_offset_limit_down: [0.08, 0.12, 0.0]
+  center_orientation_limit_up: [0, 0, -4]
+  center_orientation_limit_down: [0, 0, 4]
+  table_size: [0.6, 1.2, 0.63]
+  surface:
+    category: board
+    prim_path: /World/surface
+
+- uid: lab4
+  data_dir: scenes/lab
+  name: "lab4"
+  default_prim_path: "/World"
+  scale: 1
+  hide_ceilings: false
+  hide_walls: false
+  center_offset_limit_up: [-0.08, -0.12, 0.0]
+  center_offset_limit_down: [0.08, 0.12, 0.0]
+  center_orientation_limit_up: [0, 0, -4]
+  center_orientation_limit_down: [0, 0, 4]
+  table_size: [0.6, 1.2, 0.63]
+  surface:
+    category: board
+    prim_path: /World/surface
+
+- uid: lab5
+  data_dir: scenes/lab
+  name: "lab5"
+  default_prim_path: "/World"
+  scale: 1
+  hide_ceilings: false
+  hide_walls: false
+  center_offset_limit_up: [-0.08, -0.12, 0.0]
+  center_offset_limit_down: [0.08, 0.12, 0.0]
+  center_orientation_limit_up: [0, 0, -4]
+  center_orientation_limit_down: [0, 0, 4]
+  table_size: [0.6, 1.2, 0.63]
+  surface:
+    category: board
+    prim_path: /World/surface

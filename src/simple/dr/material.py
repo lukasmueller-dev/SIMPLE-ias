@@ -60,7 +60,11 @@ class MaterialDR(Randomizer):
         self.table_materials_infos = self.material_split[split]['table']
         self.ground_materials_infos = self.material_split[split]['ground']
 
-        if self.cfg.table_material is not None:
+        if isinstance(self.cfg.table_material, list):   # [{path, name, weight}, ...]
+            table_material = random.choices(self.cfg.table_material,
+                                            weights=[m.get("weight", 1.0) for m in self.cfg.table_material])[0]
+            ground_material = random.choice(self.ground_materials_infos)
+        elif self.cfg.table_material is not None:
             table_material = self.cfg.table_material
             ground_material = random.choice(self.ground_materials_infos)
         elif self.material_mode in ["rand_all", "rand_tableground"]:
@@ -132,5 +136,5 @@ class MaterialDR(Randomizer):
 @dataclass
 class MaterialDRCfg(RandomizerCfg):
     material_mode: str = "fixed"  # fixed, rand_all, rand_tableground, rand_objects
-    table_material: dict | None = None
+    table_material: dict | list[dict] | None = None
     randmizer_class: "Randomizer" = MaterialDR

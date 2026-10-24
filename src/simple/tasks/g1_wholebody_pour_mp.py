@@ -37,12 +37,14 @@ ROBOT_Z = 0.785                                # G1Wholebody.z_offset: the robot
 BOTTLE_XY = (EDGE_X + 0.22, -0.10)            # in front of the right hand, as in the lab photos: the right arm
 CUP_XY = (EDGE_X + 0.22, 0.01)                 # cannot reach the midline at 63 cm; cup 11 cm left: the tilt alone swings the cap ~12 cm
 JITTER = 0.03
+ROBOT_JITTER, ROBOT_YAW = 0.03, math.radians(5)   # the robot's start in x/y, and its heading
+TABLE_DH = 0.04                                   # table height +-: a new table at the lab
 
 BOTTLE_H, CUP_H, CUP_RIM_R = 0.215, 0.090, 0.037   # scripts/make_pour_assets.py
 LIFT = 0.10
 PLACE_GAP = 0.02                               # the return move stops this high over the table, the lower does the rest
 CAP_CLEAR = 0.05                               # cap height over the rim while pouring
-SQUAT = -0.12                                  # AMO height command: a 63 cm table is low for a standing G1
+SQUAT = -0.12                                  # AMO height command at a 63 cm table; deeper by what a table is lower
 SQUEEZE = 0.50                                 # rad past the pregrasp fingers: the 6.5 cm bottle is thinner than the grasp's can
 TILT = math.radians(98)                        # pour axis: this far from vertical, leaning left (toward the cup)
 HOLD_S = 1.5
@@ -50,6 +52,15 @@ POUR_TILT_MIN, POUR_HOLD_S = math.radians(90), 1.0
 HEAD_PITCH_UP = 9.0                            # deg, matched to wandb ra28b9f's first head frame
 
 _OSB = {"path": "data/vMaterials_2/Wood/OSB_Wood.mdl", "name": "OSB_Wood"}
+_BOARDS = [dict(_OSB, weight=0.5),                # the lab's board half the time, other table tops the rest
+           {"path": "data/vMaterials_2/Plastic/Polypropylene_Opaque.mdl", "name": "Polypropylene_Ivory", "weight": 1 / 6},
+           {"path": "data/vMaterials_2/Wood/Laminate_Oak.mdl", "name": "Laminate_Oak", "weight": 1 / 6},
+           {"path": "data/vMaterials_2/Plastic/Polypropylene_Opaque.mdl", "name": "Polypropylene_Light_Gray", "weight": 1 / 6}]
+# looks (simple.assets.pour): Coke Zero ~40 %, other brands and generic labels the rest; the orange cup half the time
+_BOTTLES = {"920": 0.2, "902": 0.2, "910": 0.05, "911": 0.05, "912": 0.05, "913": 0.05, "914": 0.05, "915": 0.05,
+            "916": 0.075, "917": 0.075, "918": 0.075, "919": 0.075}
+_CUPS = {"901": 0.5, "931": 0.1, "932": 0.1, "933": 0.1, "934": 0.1, "935": 0.1}
+_ROOMS = [f"hssd:lab{k}" for k in range(6)]       # scripts/make_lab_room.py
 _PLASTIC = {"reflection_roughness_constant": 0.35, "metallic_constant": 0.0, "specular_level": 0.5}
 _HAND = dict(grasp_type="bodex", hand_uid="dex3_right")
 # after the grasp the waist stays where it is: free, the planner turns it and AMO's loose torso tracking moves the palm
@@ -95,45 +106,48 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
 
     dr_cfgs: dict[str, RandomizerCfg] = dict(
         language=LanguageDRCfg(instructions=["g1/pick_bottle_and_pour_into_cup"]),
-        target=TargetDRCfg(asset_id="pour:900"),
-        container=TargetDRCfg(asset_id="pour:901"),
+        target=TargetDRCfg(asset_id="pour:900", asset_choices=_BOTTLES),
+        container=TargetDRCfg(asset_id="pour:901", asset_choices=_CUPS),
         spatial=SpatialDRCfg(
             spatial_mode="random",
-            robot_region=Box(low=[ROBOT_X, 0.0, ROBOT_Z], high=[ROBOT_X, 0.0, ROBOT_Z]),
+            robot_region=Box(low=[ROBOT_X - ROBOT_JITTER, -ROBOT_JITTER, ROBOT_Z],
+                             high=[ROBOT_X + ROBOT_JITTER, ROBOT_JITTER, ROBOT_Z]),
+            robot_orientation_region=Box(low=[math.cos(ROBOT_YAW / 2), 0.0, 0.0, -math.sin(ROBOT_YAW / 2)],
+                                         high=[1.0, 0.0, 0.0, math.sin(ROBOT_YAW / 2)]),
             target_region=Box(low=[BOTTLE_XY[0] - JITTER, BOTTLE_XY[1] - JITTER],
                               high=[BOTTLE_XY[0] + JITTER, BOTTLE_XY[1] + JITTER]),
             container_region=Box(low=[CUP_XY[0] - JITTER, CUP_XY[1] - JITTER],
                                  high=[CUP_XY[0] + JITTER, CUP_XY[1] + JITTER]),
             target_stable_indices=[0],
             target_rotate_z=Box(low=-math.pi, high=math.pi),   # label heading; grasps ignore it
-            collide_threshold=0.03,
+            collide_threshold=0.03,        # with the 3.7 cm rim and 3.25 cm bottle radius: centres >= ~10 cm
         ),
         camera=CameraDRCfg(cam_id="franka_camera"),
         scene=TabletopSceneDRCfg(
             table_size=Box(low=[TABLE_DEPTH, TABLE_WIDTH, BOARD], high=[TABLE_DEPTH, TABLE_WIDTH, BOARD]),
             table_position=Box(low=[TABLE_X, 0.0], high=[TABLE_X, 0.0]),
-            table_height=Box(low=TABLE_HEIGHT, high=TABLE_HEIGHT),
+            table_height=Box(low=TABLE_HEIGHT - TABLE_DH, high=TABLE_HEIGHT + TABLE_DH),
             enable_table2=True,
             table2_size=Box(low=[BOX_DEPTH, BOX_WIDTH, TABLE_HEIGHT - BOARD], high=[BOX_DEPTH, BOX_WIDTH, TABLE_HEIGHT - BOARD]),
             table2_position=Box(low=[TABLE_X, 0.0], high=[TABLE_X, 0.0]),
             table2_height=Box(low=TABLE_HEIGHT - BOARD, high=TABLE_HEIGHT - BOARD),
             table2_rotation_z=Box(low=0.0, high=0.0),
-            room_choices=["hssd:scene0", "hssd:scene1", "hssd:scene2", "hssd:scene4", "hssd:scene6"],
+            table2_follows_table=True,
+            room_choices=_ROOMS,
             scene_manager="hssd",
         ),
-        lighting=LightingDRCfg(
+        lighting=LightingDRCfg(        # ceiling panels, cool white, the room's 2.9 m ceiling above
             light_mode="random",
             light_num=(2, 3),
-            light_color_temperature=Box(low=3000, high=7000),
+            light_color_temperature=Box(low=4000, high=6500),
             light_intensity=Box(low=1e4 * 0.7, high=1e4 * 1.3),
             light_radius=Box(0.08, 0.12),
             light_length=Box(0.51, 1.1),
             light_spacing=Box((1.0, 1.0), (2.0, 2.0)),
-            light_position=Box((-0.8, -0.8, 1.6), (0.8, 0.8, 2.2)),
+            light_position=Box((-0.8, -0.8, 2.3), (0.8, 0.8, 2.7)),
             light_eulers=Box((0, 0, -0.5 * np.pi), (0, 0, 0.5 * np.pi)),
         ),
-        # the table is OSB; ground and room shaders still randomise
-        material=MaterialDRCfg(material_mode="rand_all", table_material=_OSB),
+        material=MaterialDRCfg(material_mode="rand_all", table_material=_BOARDS),
     )
 
     def __init__(self, *args, target_object: str | None = "pour:900", **kwargs):
@@ -172,6 +186,10 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         self._seen = {}
         self._palm_lifted = None
         self._weld_done = False
+
+    def _table_top(self) -> float:
+        table = self.layout.scene.table
+        return float(table.pose.position[2] + 0.5 * table.size[2])
 
     def preload_objects(self) -> list[Actor]:
         from simple.assets import AssetManager
@@ -253,7 +271,7 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
             return True
         axis, _ = self._axis_and_cap(info["target"])
         upright = axis[2] >= math.cos(math.radians(15))
-        on_table = abs(info["target"][2] - (TABLE_HEIGHT + 0.5 * BOTTLE_H)) < 0.02
+        on_table = abs(info["target"][2] - (self._table_top() + 0.5 * BOTTLE_H)) < 0.02
         return bool(upright and on_table and not self._in_hand(kwargs.get("mujoco_env")))
 
     # ------------------------------------------------------------------ demo
@@ -297,7 +315,7 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         hold = int(HOLD_S * self.metadata["render_hz"])
         return [
             StandSpec("initialize"),
-            HeightAdjustSpec("squat", height=SQUAT, keep_waist_pose=True),
+            HeightAdjustSpec("squat", height=SQUAT - (TABLE_HEIGHT - self._table_top()), keep_waist_pose=True),
             PhaseBreakSpec("settle", grasp_type="bodex"),
             GraspObjectSpec("approach", target_uid=self.target.uid, pregrasp=False, squeeze=SQUEEZE,
                             lock_links=["left_hand_palm_link"], **_HAND),   # waist free: the torso leans in, as task3's data does

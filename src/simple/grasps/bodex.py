@@ -198,7 +198,7 @@ class Bodex:
         )
         hand_dof = robot.hand_dof
 
-        uid = asset.uid
+        uid = getattr(asset, "grasp_uid", None) or asset.uid   # look variants share their shape's grasps
         grasp_folder = resolve_data_path(f"assets/graspnet/dex_grasp/{hand_uid}/{uid}/", auto_download=True)
         num_grasp_poses = int(sum(1 for f in os.listdir(grasp_folder) if f.endswith("pt"))/ 2)
         # get stable pose

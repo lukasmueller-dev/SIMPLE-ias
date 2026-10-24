@@ -175,6 +175,9 @@ class TabletopSceneDR(SceneDR):
                         table2_position = self.cfg.table2_position.sample()
                         table2_rotation_z = self.cfg.table2_rotation_z.sample()
                 
+                if self.cfg.table2_follows_table:   # a box under the board: its top meets the board's underside
+                    table2_height = table_height - table_size[2]
+                    table2_size = [*table2_size[:2], table2_height]
                 table2_position.append(-0.5 * table2_size[2] + table2_height)
                 quaternion2 = t3d.euler.euler2quat(0, 0, table2_rotation_z).tolist()
                 
@@ -228,6 +231,7 @@ class TabletopSceneDRCfg(RandomizerCfg):
     table2_height: Box | None = None
     table2_rotation_z: Box | None = None
     randomize_scene_pose: bool = True
+    table2_follows_table: bool = False
 
     def __post_init__(self):
         pass
