@@ -138,6 +138,8 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
 
     def __init__(self, *args, target_object: str | None = "pour:900", **kwargs):
         super().__init__(*args, target_object=target_object or "pour:900", **kwargs)
+        # eval twin: demos start arms down; the WBC's forearms-forward stabilise pose sweeps the bottle over
+        self.robot.stabilize_arms_down = True
         self._container = None
         self._pour_steps = 0
         self._poured = False

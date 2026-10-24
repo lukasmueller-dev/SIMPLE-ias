@@ -135,6 +135,8 @@ class SonicDecoupledWbcAgent(WholeBodyControlAgent):
         # arms move smoothly to the default rather than snapping.
         is_first_step = self._cached_target_q is None
         default_upper_body = self._dwbc_robot_model.get_initial_upper_body_pose()
+        if getattr(self.robot, "stabilize_arms_down", False):   # a task whose demos start arms down (MP datagen)
+            default_upper_body = np.zeros_like(default_upper_body)
         goal = {
             "target_upper_body_pose": default_upper_body,
             "navigate_cmd": np.asarray(DEFAULT_NAV_CMD),
