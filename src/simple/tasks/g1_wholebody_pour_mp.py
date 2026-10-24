@@ -152,6 +152,11 @@ class G1WholebodyPourMP(G1WholebodyTabletopGraspMP):
         return self._container
 
     def reset(self, seed: int | None = None, options: Optional[dict[str, Any]] = None) -> None:
+        state = (options or {}).get("state_dict") or {}
+        spatial = (state.get("dr_state_dict") or state).get("spatial") or {}   # eval passes the whole env config
+        if self.robot.uid not in spatial and "g1_wholebody" in spatial:   # eval twin on scenes the MP env drew
+            pose = spatial["g1_wholebody"]   # G1Sonic's MJCF holds the pelvis height: its scenes spawn at z 0
+            spatial[self.robot.uid] = {**pose, "position": [*pose["position"][:2], 0.0]}
         super().reset(seed, options)
         self._instruction = "g1/pick_bottle_and_pour_into_cup"   # psi0's task string, as the real suite reads it
         self._container = self.layout.actors.get("container")

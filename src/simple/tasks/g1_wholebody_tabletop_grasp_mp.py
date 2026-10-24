@@ -219,7 +219,8 @@ class G1WholebodyTabletopGraspMP(Task):
             # controller_uid=controller_uid,
         ))
 
-        self._robot=RobotRegistry.make(**self.robot_cfg)
+        # sonic_config: a G1Sonic eval twin (SonicLocoManipEnv), as the decoupled-WBC tasks pass it
+        self._robot=RobotRegistry.make(**self.robot_cfg, **{k: kwargs[k] for k in ("sonic_config",) if k in kwargs})
 
          # domain randomization confs
         #HACK This task only in scene3
@@ -302,7 +303,10 @@ class G1WholebodyTabletopGraspMP(Task):
         self._instruction = language_template.format(self._target.asset.name) # type: ignore
         self._init_target_height = None
         self.reward = 0
-        self.robot.reset()
+        if self.robot.uid == "g1_sonic":   # the eval twin: G1Sonic stands up from its spawn pose
+            self.robot.reset(spawn_pose=self.layout.robot.pose)
+        else:
+            self.robot.reset()
 
     # def clone_layout(self, options: dict[str, Any]) -> None:
     #     """Replicates an environment layout from given options."""
