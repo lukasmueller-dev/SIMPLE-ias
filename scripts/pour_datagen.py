@@ -23,17 +23,17 @@ from simple.agents.mp import MotionPlannerAgent
 from simple.envs.lerobot import LerobotRecorder
 from simple.mp.curobo import CuRoboPlanner
 
-ENV = "simple/G1WholebodyPourMP-v0"
-
 ap = argparse.ArgumentParser()
 ap.add_argument("save_dir")
 ap.add_argument("--episodes", type=int, default=40, help="successes to keep")
 ap.add_argument("--max-attempts", type=int, default=150)
+ap.add_argument("--keep-failed", action="store_true", help="debug: record failed attempts too")
+ap.add_argument("--env", default="simple/G1WholebodyPourMP-v0", help="also simple/G1WholebodyWalkLiftMP-v0")
 a = ap.parse_args()
 out = Path(a.save_dir)
 out.mkdir(parents=True, exist_ok=True)
 
-env = gym.make(ENV, sim_mode="mujoco_isaac", headless=True, render_hz=30, max_episode_steps=1500)
+env = gym.make(a.env, sim_mode="mujoco_isaac", headless=True, render_hz=30, max_episode_steps=1500)
 task = env.unwrapped.task
 sys.stdout = open(out / "stdout.log", "a", buffering=1)   # Isaac keeps print() in its kit log otherwise
 planner = CuRoboPlanner(robot=task.robot, plan_dt=0.01, plan_batch_size=1)
@@ -64,11 +64,17 @@ while kept < a.episodes and attempts < a.max_attempts:
                 break
         if ended:
             break
+        bottle = getattr(task, "_seen", {}).get("target")
+        up = None if bottle is None else round(float(bottle[2] - task._start[2]), 3)
+        print(f"[datagen] attempt {attempts} spec {agent._subtask_index}: robot "
+              f"{[round(float(v), 3) for v in task.layout.actors['robot'].pose.position[:3]]}, bottle up {up}")
         if state != "phase_break":
             result = "no_success"
             break
     if result == "success":
         kept += 1
+    elif a.keep_failed:          # debug: the failed attempt as an episode, for its video
+        env.dataset.save_episode()
     else:
         env.clear_episode_buffer()
     progress.write(json.dumps({"attempt": attempts, "result": result, "failed_spec": failed_spec,

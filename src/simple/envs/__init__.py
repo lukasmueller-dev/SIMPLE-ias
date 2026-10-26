@@ -90,6 +90,11 @@ register(   # the pour scene on G1Sonic for eval_decoupled_wbc (policies; demos 
     kwargs={"task":"g1_wholebody_pour_mp", "robot_uid":"g1_sonic"},
 )
 register(
+    id="simple/G1WholebodyWalkLiftMP-v0",
+    entry_point="simple.envs.loco_manipulation:LocoManipulationEnv",
+    kwargs={"task":"g1_wholebody_walk_lift_mp"},
+)
+register(
     id="simple/G1WholebodyTabletopGraspMP-v0",
     entry_point="simple.envs.loco_manipulation:LocoManipulationEnv",
     kwargs={"task":"g1_wholebody_tabletop_grasp_mp"},

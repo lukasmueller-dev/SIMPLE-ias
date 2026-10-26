@@ -427,6 +427,8 @@ class MotionPlannerAgent(PrimitiveAgent):
                 # if isinstance(self.robot, Humanoid):
                 #     traj
                 self.queue_follow_path_with_eef(traj, eef_state, hand_uid=hand_uid)
+                if spec.meta.get("hold_steps"):   # stay at the top, no new plan
+                    self.queue_follow_path_with_eef([traj[-1]] * spec.meta["hold_steps"], eef_state, hand_uid=hand_uid)
                 # self._lift_qpos_dict = traj[-1] # HACK store for move planning
                 if grasp_type == "bodex":
                     self._last_traj_qpos = np.array(list(traj[-1].values()), dtype=np.float32)[:self.planner.init_js_ik_solver.dof]
