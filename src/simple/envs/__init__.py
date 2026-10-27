@@ -94,6 +94,11 @@ register(
     entry_point="simple.envs.loco_manipulation:LocoManipulationEnv",
     kwargs={"task":"g1_wholebody_walk_lift_mp"},
 )
+register(   # the walk-lift scene on G1Sonic for eval_decoupled_wbc
+    id="simple/G1WholebodyWalkLiftEval-v0",
+    entry_point="simple.envs.sonic_loco_manip:SonicLocoManipEnv",
+    kwargs={"task":"g1_wholebody_walk_lift_mp", "robot_uid":"g1_sonic"},
+)
 register(
     id="simple/G1WholebodyTabletopGraspMP-v0",
     entry_point="simple.envs.loco_manipulation:LocoManipulationEnv",
